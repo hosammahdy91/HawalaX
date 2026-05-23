@@ -121,13 +121,19 @@ export default function HomePage() {
   // ─── جلب deviceId ───
   useEffect(() => {
     const fetchDeviceId = async () => {
+      // أولاً: نحاول من localStorage مباشرة
+      const cached = window.localStorage.getItem("deviceId");
+      if (cached) {
+        setDeviceId(cached);
+      }
+      // ثانياً: نجلب من SDK ونحدّث
       if (!sdkRef.current) return;
       try {
         const id = await sdkRef.current.getDeviceId();
         setDeviceId(id);
         window.localStorage.setItem("deviceId", id);
       } catch {
-        setStatusMsg("فشل جلب معرّف الجهاز", "error");
+        if (!cached) setStatusMsg("فشل جلب معرّف الجهاز", "error");
       }
     };
     if (sdkReady) void fetchDeviceId();
