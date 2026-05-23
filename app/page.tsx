@@ -73,6 +73,9 @@ export default function HomePage() {
             setStatusMsg("فشل: لا يوجد userToken في النتيجة.", "error");
             return;
           }
+          // حفظ الـ session في cookies
+          setCookie("userToken", result.userToken);
+          setCookie("encryptionKey", result.encryptionKey);
           setLoginResult({ userToken: result.userToken, encryptionKey: result.encryptionKey });
           setAppState("loggedIn");
           setStatusMsg("تم تسجيل الدخول بنجاح ✓", "success");
@@ -105,8 +108,19 @@ export default function HomePage() {
 
         if (!cancelled) {
           setSdkReady(true);
-          setAppState("needDeviceToken");
-          setStatusMsg("جاهز. ابدأ بإنشاء جلسة الجهاز.", "idle");
+
+          // تحقق من وجود session محفوظة (بعد redirect من Google)
+          const savedUserToken = getCookie("userToken") as string;
+          const savedEncryptionKey = getCookie("encryptionKey") as string;
+
+          if (savedUserToken && savedEncryptionKey) {
+            setLoginResult({ userToken: savedUserToken, encryptionKey: savedEncryptionKey });
+            setAppState("loggedIn");
+            setStatusMsg("تم استعادة الجلسة. أكمل إعداد المحفظة.", "success");
+          } else {
+            setAppState("needDeviceToken");
+            setStatusMsg("جاهز. ابدأ بإنشاء جلسة الجهاز.", "idle");
+          }
         }
       } catch (e) {
         console.error("SDK init error:", e);
