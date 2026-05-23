@@ -192,7 +192,7 @@ export default function HomePage() {
         deviceEncryptionKey: data.deviceEncryptionKey,
         google: {
           clientId: googleClientId,
-          redirectUri: window.location.origin,
+          redirectUri: "https://hawala-x-theta.vercel.app",
           selectAccountPrompt: true,
         },
       },
@@ -218,7 +218,7 @@ export default function HomePage() {
         deviceEncryptionKey,
         google: {
           clientId: googleClientId,
-          redirectUri: window.location.origin,
+          redirectUri: "https://hawala-x-theta.vercel.app",
           selectAccountPrompt: true,
         },
       },
