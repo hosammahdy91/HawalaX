@@ -118,27 +118,16 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // ─── جلب deviceId مع مسح القديم تلقائياً ───
+  // ─── جلب deviceId ───
   useEffect(() => {
     const fetchDeviceId = async () => {
       if (!sdkRef.current) return;
       try {
-        // نجلب deviceId جديد دائماً من SDK ونحدّث المخزن
         const id = await sdkRef.current.getDeviceId();
-        const cached = window.localStorage.getItem("deviceId");
-        if (cached && cached !== id) {
-          // deviceId تغيّر — نمسح كل البيانات القديمة
-          window.localStorage.clear();
-          document.cookie.split(";").forEach(c => {
-            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-          });
-        }
         setDeviceId(id);
         window.localStorage.setItem("deviceId", id);
       } catch {
-        // لو فشل نمسح كل شيء ونحاول من جديد
-        window.localStorage.clear();
-        setStatusMsg("فشل جلب معرّف الجهاز — حاول تحديث الصفحة", "error");
+        setStatusMsg("فشل جلب معرّف الجهاز", "error");
       }
     };
     if (sdkReady) void fetchDeviceId();
@@ -177,6 +166,15 @@ export default function HomePage() {
     }
   }, [loadBalance]);
 
+  // ─── إعادة تعيين كاملة ───
+  const handleReset = () => {
+    window.localStorage.clear();
+    document.cookie.split(";").forEach(c => {
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    window.location.reload();
+  };
+
   // ─── الخطوة 1: إنشاء device token ───
   const handleCreateDeviceToken = async () => {
     if (!deviceId) return;
@@ -187,7 +185,15 @@ export default function HomePage() {
       body: JSON.stringify({ action: "createDeviceToken", deviceId }),
     });
     const data = await res.json();
-    if (!res.ok) { setStatusMsg("فشل إنشاء جلسة الجهاز", "error"); return; }
+    if (!res.ok) {
+      // لو الـ deviceId قديم نمسح كل شيء ونبدأ من جديد
+      if (data.code === 155140 || data.errors?.[0]?.message?.includes("device ID")) {
+        handleReset();
+        return;
+      }
+      setStatusMsg("فشل إنشاء جلسة الجهاز", "error");
+      return;
+    }
 
     setDeviceToken(data.deviceToken);
     setDeviceEncryptionKey(data.deviceEncryptionKey);
