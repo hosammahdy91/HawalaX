@@ -14,14 +14,13 @@ type StatusType = "idle" | "loading" | "success" | "error";
 type Tab = "send" | "receive" | "history";
 type TxItem = { type: "send" | "receive"; addr: string; amount: string; date: string };
 
-// ─── الحالات الرئيسية للتطبيق ───
 type AppState =
-  | "init"           // لم يبدأ بعد
-  | "needDeviceToken" // يحتاج إنشاء device token
-  | "needLogin"      // يحتاج تسجيل دخول Google
-  | "loggedIn"       // سجّل دخول، يحتاج إنشاء محفظة
-  | "needChallenge"  // يحتاج تنفيذ challenge
-  | "ready";         // محفظة جاهزة
+  | "init"
+  | "needDeviceToken"
+  | "needLogin"
+  | "loggedIn"
+  | "needChallenge"
+  | "ready";
 
 export default function HomePage() {
   const sdkRef = useRef<W3SSdk | null>(null);
@@ -65,7 +64,12 @@ export default function HomePage() {
         const onLoginComplete = (error: unknown, result: any) => {
           if (cancelled) return;
           if (error) {
+            console.error("Login error:", JSON.stringify(error));
             setStatusMsg("فشل تسجيل الدخول. حاول مرة أخرى.", "error");
+            return;
+          }
+          if (!result?.userToken) {
+            setStatusMsg("فشل: لا يوجد userToken في النتيجة.", "error");
             return;
           }
           setLoginResult({ userToken: result.userToken, encryptionKey: result.encryptionKey });
@@ -73,20 +77,22 @@ export default function HomePage() {
           setStatusMsg("تم تسجيل الدخول بنجاح ✓", "success");
         };
 
-        const restoredAppId = (getCookie("appId") as string) || appId || "";
-        const restoredGoogleClientId = (getCookie("google.clientId") as string) || googleClientId || "";
-        const restoredDeviceToken = (getCookie("deviceToken") as string) || "";
-        const restoredDeviceEncryptionKey = (getCookie("deviceEncryptionKey") as string) || "";
+        // نستخدم env أولاً ثم cookies كاحتياط
+        const activeAppId = appId || (getCookie("appId") as string) || "";
+        const activeGoogleClientId = googleClientId || (getCookie("google.clientId") as string) || "";
+        const activeDeviceToken = (getCookie("deviceToken") as string) || "";
+        const activeDeviceEncryptionKey = (getCookie("deviceEncryptionKey") as string) || "";
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
 
         const sdk = new W3SSdk(
           {
-            appSettings: { appId: restoredAppId },
+            appSettings: { appId: activeAppId },
             loginConfigs: {
-              deviceToken: restoredDeviceToken,
-              deviceEncryptionKey: restoredDeviceEncryptionKey,
+              deviceToken: activeDeviceToken,
+              deviceEncryptionKey: activeDeviceEncryptionKey,
               google: {
-                clientId: restoredGoogleClientId,
-                redirectUri: typeof window !== "undefined" ? window.location.origin : "",
+                clientId: activeGoogleClientId,
+                redirectUri: origin,
                 selectAccountPrompt: true,
               },
             },
@@ -101,7 +107,8 @@ export default function HomePage() {
           setAppState("needDeviceToken");
           setStatusMsg("جاهز. ابدأ بإنشاء جلسة الجهاز.", "idle");
         }
-      } catch {
+      } catch (e) {
+        console.error("SDK init error:", e);
         if (!cancelled) setStatusMsg("فشل تهيئة SDK", "error");
       }
     };
@@ -176,6 +183,21 @@ export default function HomePage() {
     setDeviceEncryptionKey(data.deviceEncryptionKey);
     setCookie("deviceToken", data.deviceToken);
     setCookie("deviceEncryptionKey", data.deviceEncryptionKey);
+
+    // تحديث SDK بالـ token الجديد
+    sdkRef.current?.updateConfigs({
+      appSettings: { appId },
+      loginConfigs: {
+        deviceToken: data.deviceToken,
+        deviceEncryptionKey: data.deviceEncryptionKey,
+        google: {
+          clientId: googleClientId,
+          redirectUri: window.location.origin,
+          selectAccountPrompt: true,
+        },
+      },
+    });
+
     setAppState("needLogin");
     setStatusMsg("تم إنشاء جلسة الجهاز. سجّل دخولك.", "success");
   };
@@ -280,7 +302,6 @@ export default function HomePage() {
       return;
     }
 
-    // تنفيذ challenge التوقيع
     const sdk = sdkRef.current;
     if (!sdk || !data.challengeId) { setIsSending(false); return; }
 
@@ -291,7 +312,6 @@ export default function HomePage() {
         setIsSending(false);
         return;
       }
-      // تحديث السجل
       setTxHistory(prev => [{
         type: "send",
         addr: sendAddr,
@@ -303,7 +323,6 @@ export default function HomePage() {
       showToast("✓ تم الإرسال بنجاح!");
       setStatusMsg("تم الإرسال بنجاح ✓", "success");
       setIsSending(false);
-      // تحديث الرصيد
       setTimeout(() => loadBalance(loginResult!.userToken, wallets[0].id), 3000);
     });
   };
@@ -317,7 +336,6 @@ export default function HomePage() {
     showToast("تم نسخ العنوان ✓");
   };
 
-  // حساب خطوة التقدم
   const step = appState === "init" ? 0
     : appState === "needDeviceToken" ? 0
     : appState === "needLogin" ? 1
@@ -326,13 +344,9 @@ export default function HomePage() {
     : 4;
 
   const primaryWallet = wallets[0];
-  const shortAddr = primaryWallet
-    ? primaryWallet.address.slice(0, 6) + "..." + primaryWallet.address.slice(-4)
-    : "";
 
   return (
     <div className="app-shell">
-      {/* Header */}
       <header className="header">
         <div className="logo">
           <div className="logo-mark">H</div>
@@ -342,10 +356,8 @@ export default function HomePage() {
       </header>
 
       <main className="main">
-        {/* حالة التطبيق */}
         {appState !== "ready" && (
           <>
-            {/* شريط التقدم */}
             <div className="steps">
               {[0, 1, 2, 3].map(i => (
                 <div
@@ -355,11 +367,9 @@ export default function HomePage() {
               ))}
             </div>
 
-            {/* بطاقة الإعداد */}
             <div className="card">
               <p className="card-label">إعداد المحفظة</p>
 
-              {/* الخطوة 1 */}
               <button
                 className="btn btn-outline"
                 onClick={handleCreateDeviceToken}
@@ -370,7 +380,6 @@ export default function HomePage() {
                   : "① إنشاء جلسة الجهاز"}
               </button>
 
-              {/* الخطوة 2 */}
               <button
                 className="btn btn-google"
                 onClick={handleLoginWithGoogle}
@@ -385,7 +394,6 @@ export default function HomePage() {
                 ② تسجيل الدخول بـ Google
               </button>
 
-              {/* الخطوة 3 */}
               <button
                 className="btn btn-outline"
                 onClick={handleInitializeUser}
@@ -394,7 +402,6 @@ export default function HomePage() {
                 ③ تهيئة المستخدم
               </button>
 
-              {/* الخطوة 4 */}
               <button
                 className="btn btn-primary"
                 onClick={handleExecuteChallenge}
@@ -406,7 +413,6 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* شريط الحالة */}
             {status && (
               <div className="status-bar">
                 <div className={`status-dot ${statusType}`} />
@@ -416,10 +422,8 @@ export default function HomePage() {
           </>
         )}
 
-        {/* ─── واجهة المحفظة الرئيسية ─── */}
         {appState === "ready" && primaryWallet && (
           <>
-            {/* بطاقة الرصيد */}
             <div className="balance-card">
               <p className="balance-label">رصيدك الحالي</p>
               <div className="balance-amount">
@@ -433,65 +437,33 @@ export default function HomePage() {
                 USDC على Arc Testnet
               </div>
               <div className="wallet-address" onClick={copyAddress}>
-                <span className="addr-text">
-                  {primaryWallet.address}
-                </span>
+                <span className="addr-text">{primaryWallet.address}</span>
                 <span className="copy-icon">{copied ? "✓" : "⎘"}</span>
               </div>
             </div>
 
-            {/* تبويبات */}
             <div className="tabs">
-              <button
-                className={`tab ${activeTab === "send" ? "active" : ""}`}
-                onClick={() => setActiveTab("send")}
-              >إرسال</button>
-              <button
-                className={`tab ${activeTab === "receive" ? "active" : ""}`}
-                onClick={() => setActiveTab("receive")}
-              >استقبال</button>
-              <button
-                className={`tab ${activeTab === "history" ? "active" : ""}`}
-                onClick={() => setActiveTab("history")}
-              >السجل</button>
+              <button className={`tab ${activeTab === "send" ? "active" : ""}`} onClick={() => setActiveTab("send")}>إرسال</button>
+              <button className={`tab ${activeTab === "receive" ? "active" : ""}`} onClick={() => setActiveTab("receive")}>استقبال</button>
+              <button className={`tab ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}>السجل</button>
             </div>
 
-            {/* تبويب الإرسال */}
             {activeTab === "send" && (
               <div className="card">
                 <p className="card-label">إرسال USDC</p>
                 <div className="input-group">
                   <label className="input-label">عنوان المستلم</label>
-                  <input
-                    className="input input-mono"
-                    placeholder="0x..."
-                    value={sendAddr}
-                    onChange={e => setSendAddr(e.target.value)}
-                  />
+                  <input className="input input-mono" placeholder="0x..." value={sendAddr} onChange={e => setSendAddr(e.target.value)} />
                 </div>
                 <div className="input-group">
                   <label className="input-label">المبلغ</label>
                   <div className="amount-wrapper">
                     <span className="amount-currency">USDC</span>
-                    <input
-                      className="input"
-                      type="number"
-                      placeholder="0.00"
-                      min="0.01"
-                      step="0.01"
-                      value={sendAmount}
-                      onChange={e => setSendAmount(e.target.value)}
-                    />
+                    <input className="input" type="number" placeholder="0.00" min="0.01" step="0.01" value={sendAmount} onChange={e => setSendAmount(e.target.value)} />
                   </div>
                 </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSend}
-                  disabled={isSending || !sendAddr || !sendAmount}
-                >
-                  {isSending
-                    ? <><div className="spinner" /> جاري الإرسال...</>
-                    : `إرسال ${sendAmount || "0"} USDC`}
+                <button className="btn btn-primary" onClick={handleSend} disabled={isSending || !sendAddr || !sendAmount}>
+                  {isSending ? <><div className="spinner" /> جاري الإرسال...</> : `إرسال ${sendAmount || "0"} USDC`}
                 </button>
                 {status && (
                   <div className="status-bar" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -502,7 +474,6 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* تبويب الاستقبال */}
             {activeTab === "receive" && (
               <div className="card">
                 <p className="card-label">استقبال USDC</p>
@@ -518,29 +489,18 @@ export default function HomePage() {
                 </div>
                 <div className="divider">أو</div>
                 <p style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
-                  احصل على USDC تجريبي مجاناً من
-                  {" "}
-                  <a
-                    href="https://faucet.circle.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: "var(--accent)", textDecoration: "none" }}
-                  >
+                  احصل على USDC تجريبي مجاناً من{" "}
+                  <a href="https://faucet.circle.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none" }}>
                     faucet.circle.com
                   </a>
                   {" → اختر Arc Testnet"}
                 </p>
-                <button
-                  className="btn btn-outline"
-                  style={{ marginTop: 16 }}
-                  onClick={() => window.open("https://faucet.circle.com", "_blank")}
-                >
+                <button className="btn btn-outline" style={{ marginTop: 16 }} onClick={() => window.open("https://faucet.circle.com", "_blank")}>
                   فتح الـ Faucet ↗
                 </button>
               </div>
             )}
 
-            {/* تبويب السجل */}
             {activeTab === "history" && (
               <div className="card">
                 <p className="card-label">سجل المعاملات</p>
@@ -552,20 +512,13 @@ export default function HomePage() {
                 ) : (
                   txHistory.map((tx, i) => (
                     <div className="tx-item" key={i}>
-                      <div className={`tx-icon ${tx.type}`}>
-                        {tx.type === "send" ? "↑" : "↓"}
-                      </div>
+                      <div className={`tx-icon ${tx.type}`}>{tx.type === "send" ? "↑" : "↓"}</div>
                       <div className="tx-info">
-                        <div className="tx-label">
-                          {tx.type === "send" ? "إرسال" : "استقبال"}
-                        </div>
-                        <div className="tx-addr">
-                          {tx.addr.slice(0, 6)}...{tx.addr.slice(-4)}
-                        </div>
+                        <div className="tx-label">{tx.type === "send" ? "إرسال" : "استقبال"}</div>
+                        <div className="tx-addr">{tx.addr.slice(0, 6)}...{tx.addr.slice(-4)}</div>
                       </div>
                       <div className={`tx-amount ${tx.type}`}>
-                        {tx.type === "send" ? "-" : "+"}
-                        {tx.amount} USDC
+                        {tx.type === "send" ? "-" : "+"}{tx.amount} USDC
                       </div>
                     </div>
                   ))
@@ -576,7 +529,6 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
