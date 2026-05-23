@@ -118,18 +118,27 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // ─── جلب deviceId ───
+  // ─── جلب deviceId مع مسح القديم تلقائياً ───
   useEffect(() => {
     const fetchDeviceId = async () => {
       if (!sdkRef.current) return;
       try {
-        const cached = window.localStorage.getItem("deviceId");
-        if (cached) { setDeviceId(cached); return; }
+        // نجلب deviceId جديد دائماً من SDK ونحدّث المخزن
         const id = await sdkRef.current.getDeviceId();
+        const cached = window.localStorage.getItem("deviceId");
+        if (cached && cached !== id) {
+          // deviceId تغيّر — نمسح كل البيانات القديمة
+          window.localStorage.clear();
+          document.cookie.split(";").forEach(c => {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+          });
+        }
         setDeviceId(id);
         window.localStorage.setItem("deviceId", id);
       } catch {
-        setStatusMsg("فشل جلب معرّف الجهاز", "error");
+        // لو فشل نمسح كل شيء ونحاول من جديد
+        window.localStorage.clear();
+        setStatusMsg("فشل جلب معرّف الجهاز — حاول تحديث الصفحة", "error");
       }
     };
     if (sdkReady) void fetchDeviceId();
