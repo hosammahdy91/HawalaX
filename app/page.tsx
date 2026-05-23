@@ -7,6 +7,7 @@ import type { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
 
 const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID as string;
 const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID as string;
+const redirectUri = process.env.NEXT_PUBLIC_APP_URL || "https://hawala-x-theta.vercel.app";
 
 type LoginResult = { userToken: string; encryptionKey: string };
 type Wallet = { id: string; address: string; blockchain: string; [k: string]: unknown };
@@ -192,7 +193,7 @@ export default function HomePage() {
         deviceEncryptionKey: data.deviceEncryptionKey,
         google: {
           clientId: googleClientId,
-          redirectUri: "https://hawala-x-theta.vercel.app",
+          redirectUri: redirectUri,
           selectAccountPrompt: true,
         },
       },
@@ -218,7 +219,7 @@ export default function HomePage() {
         deviceEncryptionKey,
         google: {
           clientId: googleClientId,
-          redirectUri: "https://hawala-x-theta.vercel.app",
+          redirectUri: redirectUri,
           selectAccountPrompt: true,
         },
       },
